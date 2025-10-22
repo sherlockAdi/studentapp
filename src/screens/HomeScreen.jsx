@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Text, View} from 'react-native';
+import {Text, View, Image} from 'react-native';
 import {
   Container,
   Button,
@@ -27,6 +27,14 @@ import {
   Spinner,
   BottomSheet,
   Skeleton,
+  Sidebar,
+  BottomNavigation,
+  Drawer,
+  AppBar,
+  TabBar,
+  Carousel,
+  EmptyState,
+  FloatingActionButton,
 } from '../components';
 
 const HomeScreen = () => {
@@ -43,6 +51,11 @@ const HomeScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [bottomNavIndex, setBottomNavIndex] = useState(0);
+  const [tabBarIndex, setTabBarIndex] = useState(0);
+  const [carouselIndex, setCarouselIndex] = useState(0);
 
   const countryOptions = [
     {label: 'United States', value: 'us'},
@@ -324,6 +337,89 @@ const HomeScreen = () => {
           <IconButton icon={<Text>⚙️</Text>} variant="default" />
         </View>
       </Card>
+
+      {/* Sidebar & Drawer */}
+      <Card title="Sidebar & Drawer" padding="md" style={{marginBottom: 16}}>
+        <Button
+          title="Open Sidebar"
+          variant="primary"
+          onPress={() => setShowSidebar(true)}
+          fullWidth
+        />
+        <View style={{marginVertical: 8}} />
+        <Button
+          title="Open Drawer"
+          variant="secondary"
+          onPress={() => setShowDrawer(true)}
+          fullWidth
+        />
+      </Card>
+
+      {/* Tab Bar */}
+      <Card title="Tab Bar" padding="md" style={{marginBottom: 16}}>
+        <TabBar
+          tabs={[
+            {label: 'Home', icon: <Text>🏠</Text>},
+            {label: 'Search', icon: <Text>🔍</Text>},
+            {label: 'Profile', icon: <Text>👤</Text>, badge: '3'},
+          ]}
+          activeIndex={tabBarIndex}
+          onChange={setTabBarIndex}
+          variant="underline"
+        />
+        <Divider marginVertical={3} />
+        <TabBar
+          tabs={[
+            {label: 'All'},
+            {label: 'Active'},
+            {label: 'Completed'},
+          ]}
+          activeIndex={0}
+          variant="pills"
+        />
+      </Card>
+
+      {/* Carousel */}
+      <Card title="Carousel" padding="md" style={{marginBottom: 16}}>
+        <Carousel
+          data={[
+            {id: 1, color: '#3B82F6', title: 'Slide 1'},
+            {id: 2, color: '#10B981', title: 'Slide 2'},
+            {id: 3, color: '#EF4444', title: 'Slide 3'},
+          ]}
+          renderItem={({item}) => (
+            <View
+              className="flex-1 items-center justify-center rounded-lg"
+              style={{backgroundColor: item.color}}>
+              <Text className="text-white text-2xl font-bold">{item.title}</Text>
+            </View>
+          )}
+          itemHeight={150}
+          autoPlay
+          onIndexChange={setCarouselIndex}
+        />
+      </Card>
+
+      {/* Empty State */}
+      <Card title="Empty State" padding="md" style={{marginBottom: 16}}>
+        <EmptyState
+          icon={<Text style={{fontSize: 48}}>📭</Text>}
+          title="No messages"
+          description="You don't have any messages yet. Start a conversation!"
+          actionLabel="New Message"
+          onActionPress={() => console.log('New message')}
+        />
+      </Card>
+
+      {/* Bottom Navigation Preview */}
+      <Card title="Bottom Navigation" padding="md" style={{marginBottom: 80}}>
+        <Text className="text-gray-700 mb-2">
+          Bottom navigation is displayed at the bottom of the screen
+        </Text>
+        <Text className="text-gray-600 text-sm">
+          Current tab: {['Home', 'Search', 'Favorites', 'Profile'][bottomNavIndex]}
+        </Text>
+      </Card>
       </Container>
 
       {/* Modal Component */}
@@ -382,6 +478,116 @@ const HomeScreen = () => {
           fullWidth
         />
       </BottomSheet>
+
+      {/* Sidebar Component */}
+      <Sidebar
+        visible={showSidebar}
+        onClose={() => setShowSidebar(false)}
+        position="left"
+        header={
+          <View>
+            <Text className="text-white text-xl font-bold">Menu</Text>
+            <Text className="text-white text-sm opacity-80">Welcome back!</Text>
+          </View>
+        }
+        items={[
+          {
+            label: 'Home',
+            icon: <Text>🏠</Text>,
+            active: true,
+            onPress: () => console.log('Home'),
+          },
+          {
+            label: 'Profile',
+            icon: <Text>👤</Text>,
+            subtitle: 'View your profile',
+            onPress: () => console.log('Profile'),
+          },
+          {
+            label: 'Settings',
+            icon: <Text>⚙️</Text>,
+            onPress: () => console.log('Settings'),
+          },
+          {
+            label: 'Notifications',
+            icon: <Text>🔔</Text>,
+            badge: '5',
+            onPress: () => console.log('Notifications'),
+          },
+          {
+            label: 'Help',
+            icon: <Text>❓</Text>,
+            onPress: () => console.log('Help'),
+          },
+        ]}
+        footer={
+          <Button
+            title="Logout"
+            variant="danger"
+            onPress={() => {
+              console.log('Logout');
+              setShowSidebar(false);
+            }}
+            fullWidth
+          />
+        }
+      />
+
+      {/* Drawer Component */}
+      <Drawer
+        visible={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        position="right">
+        <View className="p-4">
+          <Text className="text-2xl font-bold text-gray-900 mb-4">Drawer Menu</Text>
+          <Divider />
+          <View style={{gap: 16, marginTop: 16}}>
+            <Button title="Option 1" variant="outline" onPress={() => {}} />
+            <Button title="Option 2" variant="outline" onPress={() => {}} />
+            <Button title="Option 3" variant="outline" onPress={() => {}} />
+            <Button
+              title="Close Drawer"
+              variant="primary"
+              onPress={() => setShowDrawer(false)}
+            />
+          </View>
+        </View>
+      </Drawer>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation
+        items={[
+          {label: 'Home', icon: <Text style={{fontSize: 24}}>🏠</Text>},
+          {label: 'Search', icon: <Text style={{fontSize: 24}}>🔍</Text>},
+          {label: 'Favorites', icon: <Text style={{fontSize: 24}}>❤️</Text>, badge: '3'},
+          {label: 'Profile', icon: <Text style={{fontSize: 24}}>👤</Text>},
+        ]}
+        activeIndex={bottomNavIndex}
+        onChange={setBottomNavIndex}
+      />
+
+      {/* Floating Action Button */}
+      <FloatingActionButton
+        icon={<Text style={{fontSize: 24, color: '#fff'}}>+</Text>}
+        position="bottom-right"
+        actions={[
+          {
+            icon: <Text style={{fontSize: 20, color: '#fff'}}>📷</Text>,
+            backgroundColor: '#10B981',
+            onPress: () => console.log('Camera'),
+          },
+          {
+            icon: <Text style={{fontSize: 20, color: '#fff'}}>📁</Text>,
+            backgroundColor: '#3B82F6',
+            onPress: () => console.log('Files'),
+          },
+          {
+            icon: <Text style={{fontSize: 20, color: '#fff'}}>📝</Text>,
+            backgroundColor: '#EF4444',
+            onPress: () => console.log('Note'),
+          },
+        ]}
+      />
     </>
   );
 };

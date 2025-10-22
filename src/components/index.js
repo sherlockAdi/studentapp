@@ -34,6 +34,16 @@ export {default as BottomSheet} from './BottomSheet';
 export {default as Tabs} from './Tabs';
 export {default as Accordion} from './Accordion';
 export {default as Stepper} from './Stepper';
+export {default as Sidebar} from './Sidebar';
+export {default as BottomNavigation} from './BottomNavigation';
+export {default as Drawer} from './Drawer';
+export {default as AppBar} from './AppBar';
+export {default as TabBar} from './TabBar';
 
 // Data Display Components
 export {default as List} from './List';
+export {default as Carousel} from './Carousel';
+export {default as EmptyState} from './EmptyState';
+
+// Action Components
+export {default as FloatingActionButton} from './FloatingActionButton';
