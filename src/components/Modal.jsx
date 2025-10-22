@@ -25,12 +25,14 @@ const Modal = ({
       transparent={size !== 'full'}
       animationType={animationType}
       onRequestClose={onClose}>
-      <View className={`flex-1 ${size === 'full' ? '' : 'bg-black/50 justify-center items-center'}`}>
+      <View 
+        className={`flex-1 ${size === 'full' ? '' : 'justify-center items-center'}`}
+        style={size !== 'full' ? {backgroundColor: 'rgba(0, 0, 0, 0.5)'} : {}}>
         <View
           className={`${sizes[size]} ${
-            size === 'full' ? 'flex-1' : 'max-h-5/6'
+            size === 'full' ? 'flex-1' : ''
           } bg-white rounded-xl overflow-hidden`}
-          style={style}>
+          style={[{maxHeight: size !== 'full' ? '80%' : '100%'}, style]}>
           {/* Header */}
           {(title || showCloseButton) && (
             <View className="flex-row justify-between items-center p-4 border-b border-gray-200">

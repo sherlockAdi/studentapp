@@ -60,15 +60,17 @@ const Toast = ({
 
   return (
     <Animated.View
-      className={`absolute ${position === 'top' ? 'top-12' : 'bottom-12'} left-4 right-4 z-50`}
+      className={`absolute ${position === 'top' ? 'top-12' : 'bottom-12'} left-4 right-4`}
       style={[
         {
           opacity,
           transform: [{translateY}],
+          zIndex: 9999,
+          elevation: 9999,
         },
         style,
       ]}>
-      <View className={`${types[type]} p-4 rounded-lg shadow-lg`}>
+      <View className={`${types[type]} p-4 rounded-lg`} style={{shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5}}>
         <Text className="text-white text-base font-semibold">{message}</Text>
       </View>
     </Animated.View>
