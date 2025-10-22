@@ -1,5 +1,5 @@
-import React from 'react';
-import {View, Text, TouchableOpacity, ScrollView, Modal} from 'react-native';
+import React, {useEffect, useRef} from 'react';
+import {View, Text, TouchableOpacity, ScrollView, Modal, Animated} from 'react-native';
 
 const Sidebar = ({
   visible = false,
@@ -11,30 +11,74 @@ const Sidebar = ({
   items = [],
   style,
 }) => {
-  const positionStyle = position === 'left' ? {left: 0} : {right: 0};
+  const translateX = useRef(new Animated.Value(position === 'left' ? -width : width)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 50,
+          friction: 8,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(translateX, {
+          toValue: position === 'left' ? -width : width,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
-      <View className="flex-1 flex-row" style={{backgroundColor: 'rgba(0, 0, 0, 0.5)'}}>
-        {/* Backdrop */}
+    <View className="absolute inset-0" style={{zIndex: 1000}}>
+      {/* Backdrop */}
+      <Animated.View
+        className="absolute inset-0"
+        style={{backgroundColor: 'rgba(0, 0, 0, 0.5)', opacity}}>
         <TouchableOpacity
           className="flex-1"
           activeOpacity={1}
           onPress={onClose}
         />
+      </Animated.View>
 
-        {/* Sidebar */}
-        <View
-          className="bg-white h-full shadow-lg"
-          style={[
-            positionStyle,
-            {width, position: 'absolute', top: 0, bottom: 0},
-            style,
-          ]}>
+      {/* Sidebar */}
+      <Animated.View
+        className="bg-white shadow-lg"
+        style={[
+          {
+            width,
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            [position]: 0,
+            transform: [{translateX}],
+            shadowColor: '#000',
+            shadowOffset: {width: position === 'left' ? 2 : -2, height: 0},
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 16,
+          },
+          style,
+        ]}>
           {/* Header */}
           {header && (
             <View className="p-4 border-b border-gray-200 bg-blue-600">
@@ -83,9 +127,8 @@ const Sidebar = ({
               {footer}
             </View>
           )}
-        </View>
+        </Animated.View>
       </View>
-    </Modal>
   );
 };
 
