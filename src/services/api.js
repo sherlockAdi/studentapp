@@ -92,8 +92,8 @@ class ApiService {
       }
 
       if (!response.ok) {
-        // Handle token issues once (401 Unauthorized or 403 Forbidden)
-        if ((response.status === 401 || response.status === 403) && requiresAuth && !_retry) {
+        // Handle token expiration once
+        if ((response.status == 401 || response.status == 403) && requiresAuth && !_retry) {
           const refreshed = await this.refreshAccessToken();
           if (refreshed) {
             // Retry the request with new token (guard against loops)
@@ -103,8 +103,6 @@ class ApiService {
         const message = (data && (data.error || data.message)) || `HTTP ${response.status}`;
         const err = new Error(message);
         err.status = response.status;
-        err.endpoint = endpoint;
-        err.method = method;
         throw err;
       }
 
