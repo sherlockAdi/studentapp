@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {API_BASE_URL} from '../config/api';
+import {API_BASE_URL, API_ENDPOINTS} from '../config/api';
 
 /**
  * API Service - Handles all HTTP requests with authentication
@@ -55,6 +55,7 @@ class ApiService {
       body,
       headers = {},
       requiresAuth = true,
+      _retry = false,
     } = options;
 
     const url = `${this.baseURL}${endpoint}`;
@@ -83,18 +84,28 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (_) {
+        // no json
+      }
 
       if (!response.ok) {
-        // Handle token expiration
-        if (response.status === 401 && requiresAuth) {
+        // Handle token issues once (401 Unauthorized or 403 Forbidden)
+        if ((response.status === 401 || response.status === 403) && requiresAuth && !_retry) {
           const refreshed = await this.refreshAccessToken();
           if (refreshed) {
-            // Retry the request with new token
-            return this.request(endpoint, options);
+            // Retry the request with new token (guard against loops)
+            return this.request(endpoint, {...options, _retry: true});
           }
         }
-        throw new Error(data.error || `HTTP ${response.status}`);
+        const message = (data && (data.error || data.message)) || `HTTP ${response.status}`;
+        const err = new Error(message);
+        err.status = response.status;
+        err.endpoint = endpoint;
+        err.method = method;
+        throw err;
       }
 
       return data;
@@ -114,14 +125,22 @@ class ApiService {
         return false;
       }
 
-      const response = await this.request('/auth/refresh', {
+      const url = `${this.baseURL}${API_ENDPOINTS.AUTH.REFRESH}`;
+      const res = await fetch(url, {
         method: 'POST',
-        body: {refreshToken},
-        requiresAuth: false,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({refreshToken}),
       });
+      const data = await res.json();
 
-      if (response.accessToken) {
-        await AsyncStorage.setItem('accessToken', response.accessToken);
+      if (res.ok && data.accessToken) {
+        await AsyncStorage.setItem('accessToken', data.accessToken);
+        if (data.refreshToken) {
+          await AsyncStorage.setItem('refreshToken', data.refreshToken);
+        }
         return true;
       }
       return false;
