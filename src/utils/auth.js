@@ -1,33 +1,46 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = 'http://61.246.33.108:8069/studentapi';
+import ApiService from '../services/api';
+import {API_ENDPOINTS} from '../config/api';
 
 /**
- * Login user with username and password
- * @param {string} username - Username or email
- * @param {string} password - User password
- * @returns {Promise<Object>} Response object with user data
+ * Register new user
+ * @param {Object} userData - User registration data
+ * @returns {Promise<Object>} Response object
  */
-export const loginUser = async (username, password) => {
+export const registerUser = async (userData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+    const response = await ApiService.post(
+      API_ENDPOINTS.AUTH.REGISTER,
+      userData,
+      {requiresAuth: false}
+    );
+    return response;
+  } catch (error) {
+    console.error('Registration Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Login user with email and password
+ * @param {string} email - User email
+ * @param {string} password - User password
+ * @param {string} deviceInfo - Device information
+ * @returns {Promise<Object>} Response object with tokens and user data
+ */
+export const loginUser = async (email, password, deviceInfo = 'React Native App') => {
+  try {
+    const response = await ApiService.post(
+      API_ENDPOINTS.AUTH.LOGIN,
+      {
+        email,
+        password,
+        deviceInfo,
       },
-      body: JSON.stringify({
-        Username: username,
-        Password: password,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
+      {requiresAuth: false}
+    );
+    console.log('Login response:', response);
+    return response;
   } catch (error) {
     console.error('Login API Error:', error);
     throw new Error(error.message || 'Failed to login. Please try again.');
@@ -35,17 +48,23 @@ export const loginUser = async (username, password) => {
 };
 
 /**
- * Save user data to AsyncStorage
- * @param {Object} userData - User data to save
+ * Save user data and tokens to AsyncStorage
+ * @param {Object} loginResponse - Login response with tokens and user data
  */
-export const saveUserData = async (userData) => {
+export const saveUserData = async (loginResponse) => {
   try {
-    await AsyncStorage.setItem('userData', JSON.stringify(userData));
-    await AsyncStorage.setItem('isLoggedIn', 'true');
-    await AsyncStorage.setItem('userId', userData.userId);
-    await AsyncStorage.setItem('userEmail', userData.userEmail);
-    await AsyncStorage.setItem('roleId', userData.RoleId);
-    console.log('User data saved successfully');
+    const {accessToken, refreshToken, user} = loginResponse;
+    
+    await AsyncStorage.multiSet([
+      ['accessToken', accessToken],
+      ['refreshToken', refreshToken],
+      ['userData', JSON.stringify(user)],
+      ['isLoggedIn', 'true'],
+      ['userId', user.id.toString()],
+      ['userEmail', user.email],
+    ]);
+    
+    console.log('User data and tokens saved successfully');
   } catch (error) {
     console.error('Error saving user data:', error);
     throw new Error('Failed to save user data');
@@ -85,13 +104,27 @@ export const isUserLoggedIn = async () => {
  */
 export const logoutUser = async () => {
   try {
+    const refreshToken = await AsyncStorage.getItem('refreshToken');
+    
+    // Call logout API
+    if (refreshToken) {
+      try {
+        await ApiService.post(API_ENDPOINTS.AUTH.LOGOUT, {refreshToken});
+      } catch (error) {
+        console.error('Logout API error:', error);
+      }
+    }
+    
+    // Clear all stored data
     await AsyncStorage.multiRemove([
+      'accessToken',
+      'refreshToken',
       'userData',
       'isLoggedIn',
       'userId',
       'userEmail',
-      'roleId',
     ]);
+    
     console.log('User logged out successfully');
   } catch (error) {
     console.error('Error logging out:', error);
