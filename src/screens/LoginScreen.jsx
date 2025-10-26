@@ -81,150 +81,132 @@ const LoginScreen = ({navigation}) => {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1"
-      style={{backgroundColor: '#FFFFFF'}}>
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      className="flex-1 bg-white"
+    >
       <ScrollView
-        contentContainerStyle={{flexGrow: 1, padding: 24}}
+        contentContainerStyle={{ padding: 24, flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        <View className="flex-1 justify-center" style={{paddingHorizontal: 8}}>
-          {/* LOGIN Header */}
-          <Text
-            className="text-center font-semibold mb-16"
-            style={{color: '#000000', fontSize: 16, letterSpacing: 3}}>
-            LOGIN
-          </Text>
-
-          {/* Healthcare Title */}
-          <Text
-            className="text-center font-bold mb-20"
-            style={{color: '#000000', fontSize: 48}}>
-            Healthcare
-          </Text>
-
-          {/* Error Alert */}
-          {error ? (
-            <View className="mb-4">
-              <Alert type="error" message={error} />
-            </View>
-          ) : null}
-
+      >
+        <View className="flex-1 justify-center">
+      
+      
+       <Text className="text-center font-semibold mb-16" style={{color: '#000000', fontSize: 16, letterSpacing: 3}}> LOGIN </Text> 
+       <Text className="text-center font-bold mb-20" style={{color: '#000000', fontSize: 48}}> Healthcare </Text>
           {/* Email Input */}
-          <View className="mb-8">
-            <Text className="text-sm font-medium mb-2" style={{color: '#000000'}}>
-              Email Id
+          <View className="mb-6">
+            <Text className="text-sm font-medium mb-2 text-gray-700">
+              Email
             </Text>
             <View
-              className="flex-row items-center"
+              className="flex-row items-center bg-gray-50"
               style={{
                 borderWidth: 1,
-                borderColor: '#CCCCCC',
-                borderRadius: 25,
-                paddingHorizontal: 20,
-                paddingVertical: 16,
-                backgroundColor: '#FFFFFF',
-              }}>
-              <View style={{marginRight: 16}}>
-                <Text style={{fontSize: 22}}>✉</Text>
-              </View>
+                borderColor: "#E5E7EB",
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                height: 55,
+              }}
+            >
+              <Text className="text-xl mr-3">📧</Text>
               <TextInput
-                className="flex-1"
-                placeholder=""
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
-                  setError('');
+                  setError("");
                 }}
-                keyboardType="email-address"
+                placeholder="Enter your email"
                 autoCapitalize="none"
+                keyboardType="email-address"
                 editable={!loading}
-                style={{color: '#000000', fontSize: 16}}
-                placeholderTextColor="#999999"
+                className="flex-1 text-black"
+                placeholderTextColor="#A1A1A1"
+                style={{ fontSize: 16 }}
               />
             </View>
           </View>
 
           {/* Password Input */}
-          <View className="mb-4">
-            <Text className="text-sm font-medium mb-2" style={{color: '#000000'}}>
+          <View className="mb-2">
+            <Text className="text-sm font-medium mb-2 text-gray-700">
               Password
             </Text>
             <View
-              className="flex-row items-center"
+              className="flex-row items-center bg-gray-50"
               style={{
                 borderWidth: 1,
-                borderColor: '#CCCCCC',
-                borderRadius: 25,
-                paddingHorizontal: 20,
-                paddingVertical: 16,
-                backgroundColor: '#FFFFFF',
-              }}>
-              <View style={{marginRight: 16}}>
-                <Text style={{fontSize: 22}}>🔒</Text>
-              </View>
+                borderColor: "#E5E7EB",
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                height: 55,
+              }}
+            >
+              <Text className="text-xl mr-3">🔐</Text>
               <TextInput
-                className="flex-1"
-                placeholder=""
                 value={password}
                 onChangeText={(text) => {
                   setPassword(text);
-                  setError('');
+                  setError("");
                 }}
+                placeholder="Enter your password"
                 secureTextEntry={!showPassword}
                 editable={!loading}
-                style={{color: '#000000', fontSize: 16}}
-                placeholderTextColor="#999999"
+                className="flex-1 text-black"
+                placeholderTextColor="#A1A1A1"
+                style={{ fontSize: 16 }}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Text style={{fontSize: 20}}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                <Text className="text-lg">
+                  {showPassword ? "🙈" : "👁️"}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Forgot Password */}
-          <View className="items-end mb-10">
-            <TouchableOpacity disabled={loading}>
-              <Text className="text-sm font-semibold" style={{color: '#2E5C8A'}}>
-                Forgot Password !
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Register Link */}
-          <View className="flex-row justify-center items-center mb-16">
-            <Text className="text-sm" style={{color: '#000000'}}>
-              Don't Have an Account : {' '}
+          <TouchableOpacity className="items-end mb-8">
+            <Text className="text-sm font-semibold text-blue-600">
+              Forgot password?
             </Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Register')}
-              disabled={loading}>
-              <Text className="text-sm font-semibold" style={{color: '#2E5C8A'}}>
-                Click here to register
-              </Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
 
           {/* Login Button */}
           <TouchableOpacity
-            className="items-center"
+           onPress={handleLogin}
+            disabled={loading}
+            className="items-center justify-center"
             style={{
-              backgroundColor: '#5B9BD5',
-              borderRadius: 12,
-              paddingVertical: 18,
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: 2},
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
+              backgroundColor: "#2563EB",
+              borderRadius: 14,
+              paddingVertical: 16,
+              shadowColor: "#000",
+              shadowOpacity: 0.15,
+              shadowRadius: 5,
               elevation: 3,
             }}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.8}>
-            <Text className="text-white font-bold" style={{fontSize: 18, letterSpacing: 2}}>
-              {loading ? 'LOGGING IN...' : 'LOGIN'}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                color: "white",
+                letterSpacing: 1,
+              }}
+            >
+              {loading ? "Logging in..." : "Login"}
             </Text>
           </TouchableOpacity>
+
+          {/* Signup Redirect */}
+          <View className="flex-row justify-center items-center mt-10">
+            <Text className="text-sm text-gray-600">New here? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Register")}>
+              <Text className="text-sm font-semibold text-blue-600">
+                Create Account
+              </Text>
+            </TouchableOpacity>
+          </View>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

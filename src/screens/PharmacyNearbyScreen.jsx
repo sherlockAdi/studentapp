@@ -11,8 +11,12 @@ import {
   Alert as RNAlert,
   ActivityIndicator,
   Animated,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import {Spinner} from '../components';
+import Geolocation from 'react-native-geolocation-service';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import PharmacyService from '../services/pharmacyService';
 import FileService from '../services/fileService';
 import DocumentPicker from 'react-native-document-picker';
@@ -43,7 +47,9 @@ const PharmacyNearbyScreen = ({navigation}) => {
     Longitude: '',
     Phone: '',
   });
-
+  const [currentCoords, setCurrentCoords] = useState(null); // { latitude, longitude }
+  const [currentPlace, setCurrentPlace] = useState('Locating...');
+  const [progressText, setProgressText] = useState('');
   const showSuccessToast = () => {
     Animated.sequence([
       Animated.delay(500),
@@ -54,7 +60,7 @@ const PharmacyNearbyScreen = ({navigation}) => {
   };
 
   useEffect(() => {
-    loadNearby();
+    initLocationAndNearby();
   }, []);
 
   const loadPharmacies = async () => {
@@ -80,38 +86,148 @@ const PharmacyNearbyScreen = ({navigation}) => {
     }
   };
 
-  // Create a simple reminder associated with the uploaded document
+  const requestLocationPermission = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        // Request both; accept if either is granted
+        const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        const fine = result[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+        const coarse = result[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION];
+        return (
+          fine === PermissionsAndroid.RESULTS.GRANTED ||
+          coarse === PermissionsAndroid.RESULTS.GRANTED
+        );
+      }
+      // iOS permissions are handled by system prompt when accessing geolocation
+      return true;
+    } catch (e) {
+      console.warn('Location permission error:', e);
+      return false;
+    }
+  };
+
+  const getDeviceLocation = () => new Promise((resolve) => {
+    // If native module not available yet (e.g., app not rebuilt), fallback to navigator
+    if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
+      console.warn('Geolocation native module not available, falling back to navigator.geolocation');
+      const navGeo = (typeof navigator !== 'undefined' && navigator.geolocation) ? navigator.geolocation : null;
+      if (!navGeo) return resolve(null);
+      navGeo.getCurrentPosition(
+        (pos) => {
+          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          console.log('Location (navigator):', coords);
+          resolve(coords);
+        },
+        (err) => {
+          console.warn('Navigator getCurrentPosition error:', err);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      );
+      return;
+    }
+
+    const tryLowAccuracy = () =>
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          console.log('Location (low accuracy):', coords);
+          resolve(coords);
+        },
+        (err) => {
+          console.warn('Low accuracy getCurrentPosition error:', err);
+          resolve(null);
+        },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 0, forceRequestLocation: true }
+      );
+
+    Geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        console.log('Location (high accuracy):', coords);
+        resolve(coords);
+      },
+      (err) => {
+        console.warn('High accuracy getCurrentPosition error:', err);
+        tryLowAccuracy();
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0, forceRequestLocation: true }
+    );
+  });
+
+  const reverseGeocode = async (lat, lon) => {
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'StudentApp/1.0 (RN)' }
+      });
+      const data = await resp.json();
+      // Prefer full display_name from Nominatim; fallback to composed address
+      let place = data && data.display_name;
+      if (!place) {
+        const a = data && data.address ? data.address : {};
+        const parts = [
+          a.house_number,
+          a.road,
+          a.suburb || a.neighbourhood || a.locality,
+          a.village || a.town || a.city || a.county,
+          a.state,
+          a.postcode,
+          a.country,
+        ].filter(Boolean);
+        place = parts.length ? parts.join(', ') : `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      }
+      console.log('Reverse geocode place:', place);
+      return place;
+    } catch (e) {
+      console.warn('Reverse geocode failed:', e);
+      return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+    }
+  };
+
+  const initLocationAndNearby = async () => {
+    setLoading(true);
+    const permitted = await requestLocationPermission();
+    console.log('Location permission granted:', permitted);
+    let coords = null;
+    if (permitted) {
+      coords = await getDeviceLocation();
+    }
+    if (!coords) {
+      // Fallback to default (NYC) if no location
+      coords = { latitude: 40.7128, longitude: -74.006 };
+      console.log('Using fallback coords:', coords);
+    }
+    setCurrentCoords(coords);
+    const place = await reverseGeocode(coords.latitude, coords.longitude);
+    setCurrentPlace(place);
+    await loadNearby(coords.latitude, coords.longitude);
+  };
+
+  // Create reminder with the proven payload (lowercase fields + ISO Z + userId)
   const createUploadReminder = async ({fileName}) => {
     try {
-      const nowIso = new Date().toISOString();
-      // Many endpoints in this API use Capitalized fields
-      const payloadCapital = {
-        Title: 'Prescription Upload',
-        Description: `Document: ${fileName}`,
-        ReminderTime: nowIso,
-        IsCompleted: false,
-        CompletedAt: null,
+      const isoNoMsZ = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const uidStr = await AsyncStorage.getItem('userId');
+      const userId = uidStr ? parseInt(uidStr, 10) : undefined;
+      const payload = {
+        title: 'Prescription Upload',
+        description: `Document: ${fileName}`,
+        reminderTime: isoNoMsZ,
+        isCompleted: false,
+        completedAt: null,
+        ...(userId ? {userId} : {}),
       };
-      console.log('Creating reminder (capitalized fields)...');
-      let res = await ReminderService.createReminder(payloadCapital);
-      if (res && (res.id || res.Id || res.reminderId)) {
-        const rid = res.id || res.Id || res.reminderId;
+      console.log('Creating reminder (final payload):', payload);
+      const res = await ReminderService.createReminder(payload);
+      const rid = res && (res.id || res.Id || res.reminderId);
+      if (rid) {
         console.log('Reminder created with ID:', rid);
         return rid;
       }
-      // Fallback: try lowercase fields if first didn’t return an id
-      const payloadLower = {
-        title: payloadCapital.Title,
-        description: payloadCapital.Description,
-        reminderTime: payloadCapital.ReminderTime,
-        isCompleted: false,
-        completedAt: null,
-      };
-      console.log('Retry creating reminder (lowercase fields)...');
-      res = await ReminderService.createReminder(payloadLower);
-      const rid = res && (res.id || res.Id || res.reminderId);
-      console.log('Reminder create (fallback) response id:', rid);
-      return rid || null;
+      return null;
     } catch (e) {
       console.warn('Failed to create reminder for upload:', e.message || e);
       return null;
@@ -120,7 +236,12 @@ const PharmacyNearbyScreen = ({navigation}) => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadNearby();
+    if (currentCoords) {
+      console.log('Refresh with coords:', currentCoords);
+      await loadNearby(currentCoords.latitude, currentCoords.longitude);
+    } else {
+      await initLocationAndNearby();
+    }
     setRefreshing(false);
   };
 
@@ -278,6 +399,7 @@ const PharmacyNearbyScreen = ({navigation}) => {
     if (!stagedFile) return;
     try {
       setUploading(true);
+      setProgressText('Uploading...');
       let cloud;
       if (stagedFile.type === 'file') {
         const dataUri = `data:${stagedFile.mimeType};base64,${stagedFile.base64}`;
@@ -297,9 +419,9 @@ const PharmacyNearbyScreen = ({navigation}) => {
         });
         console.log('Cloudinary link upload success:', cloud);
       }
-
-      // Create reminder and save file record
+      setProgressText('Creating reminder...');
       const reminderId = await createUploadReminder({fileName: stagedFile.fileName});
+      setProgressText('Saving...');
       await uploadPayload({
         fileName: cloud.fileName,
         mimeType: cloud.mimeType,
@@ -309,276 +431,221 @@ const PharmacyNearbyScreen = ({navigation}) => {
         base64Data: stagedFile.type === 'file' ? stagedFile.base64 : '',
         reminderId,
       });
-      // Show toast, then reset UI
       showSuccessToast();
       setStagedFile(null);
       setUploadedPreview(null);
       setLastFileId(null);
     } catch (e) {
-      // errors handled in uploadPayload
+      console.error('Continue upload error:', e);
     } finally {
+      setProgressText('');
       setUploading(false);
     }
-  };
-
-  if (loading) {
-    return (
-      <View className="flex-1 bg-white justify-center items-center">
-        <Spinner text="Loading..." />
-      </View>
-    );
   }
 
   return (
-    <View className="flex-1 bg-white">
-      {/* Header */}
-      <View className="flex-row items-center px-4 pt-10 pb-3">
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={{fontSize: 24}}>←</Text>
+  <View className="flex-1 bg-white">
+    
+    {/* HEADER */}
+  <View className="flex-row items-center px-5 pt-12 pb-4 bg-white shadow-md rounded-b-3xl">
+  <TouchableOpacity
+    onPress={() => navigation.goBack()}
+    className="w-10 h-10 rounded-full border border-gray-300 items-center justify-center"
+  >
+    <Text className="text-lg font-bold">←</Text>
+  </TouchableOpacity>
+
+  <View className="ml-4" style={{flexShrink: 1}}>
+    <Text className="text-sm text-gray-500">📍 Current Location</Text>
+    <Text
+      className="text-lg font-bold text-gray-900"
+      numberOfLines={2}
+      ellipsizeMode="tail"
+      style={{lineHeight: 22}}
+    >
+      {currentPlace || 'Locating...'}
+    </Text>
+  </View>
+</View>
+
+
+    <ScrollView
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+      contentContainerStyle={{ paddingBottom: 120 }}
+      showsVerticalScrollIndicator={false}
+    >
+
+      {/* Section Title */}
+      <View className="px-4 mt-4 mb-2 flex-row justify-between items-center">
+        <Text className="text-lg font-bold">Nearby Pharmacy</Text>
+        <TouchableOpacity onPress={() => currentCoords ? loadNearby(currentCoords.latitude, currentCoords.longitude) : initLocationAndNearby()}>
+          <Text className="text-blue-600 font-medium">Refresh</Text>
         </TouchableOpacity>
-        <View className="flex-row items-center ml-3">
-          <Text style={{fontSize: 18, marginRight: 6}}>📍</Text>
-          <Text className="text-base font-semibold">Mohali</Text>
-        </View>
       </View>
 
-      <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{paddingBottom: 70}}>
-        
-        {/* Title & actions */}
-        <View className="px-4 mb-3 flex-row justify-between items-center">
-          <Text className="text-xl font-bold">Pharmacy Nearby</Text>
-          <TouchableOpacity onPress={() => loadNearby()}>
-            <Text style={{color: '#2563EB', fontWeight: '600'}}>Refresh</Text>
+      {/* Card Container */}
+      <View className="px-4 pb-2 flex-row flex-wrap justify-between">
+        {(showAllNearby ? pharmacies : pharmacies.slice(0, 2)).map((pharmacy, index) => (
+          <TouchableOpacity
+            key={(pharmacy.Id || pharmacy.id || index).toString()}
+            className="bg-white mb-4"
+            style={{
+              width: "48%",
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: "#E8E8E8",
+              elevation: 3,
+              shadowColor: "#000",
+              shadowOpacity: 0.08,
+              shadowRadius: 4,
+              shadowOffset: { width: 0, height: 2 },
+            }}
+          >
+            <View
+              className="w-full items-center justify-center rounded-t-2xl"
+              style={{ height: 90, backgroundColor: "#F4F5F7" }}
+            >
+              <Text style={{ fontSize: 34 }}>🏥</Text>
+            </View>
+
+            <View className="p-3">
+              <Text className="text-sm font-semibold text-gray-800" numberOfLines={1}>
+                {pharmacy.Name || pharmacy.name}
+              </Text>
+
+              {pharmacy.DistanceKM && (
+                <Text className="text-[11px] text-gray-500 mt-1">
+                  {pharmacy.DistanceKM.toFixed(1)} km away
+                </Text>
+              )}
+
+              <View className="flex-row items-center mt-1">
+                <Text style={{ color: "#FBBF24", fontSize: 12 }}>⭐</Text>
+                <Text className="text-[11px] text-gray-500 ml-1">4.5 (120 rev)</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* SEE MORE */}
+      {pharmacies.length > 2 && (
+        <View className="items-center mb-4">
+          <TouchableOpacity onPress={() => setShowAllNearby(!showAllNearby)}>
+            <Text className="text-blue-600 font-semibold">
+              {showAllNearby ? "See Less" : "See More"}
+            </Text>
           </TouchableOpacity>
         </View>
+      )}
 
-        {/* Pharmacy Cards - with See more */}
-        <View className="px-4 flex-row mb-3" style={{gap: 10, flexWrap: 'wrap'}}>
-          {(showAllNearby ? pharmacies : pharmacies.slice(0, 2)).map((pharmacy, index) => (
-            <TouchableOpacity
-              key={(pharmacy.Id || pharmacy.id || index).toString()}
-              className="bg-white rounded-2xl overflow-hidden"
-              style={{
-                width: '48%',
-                borderWidth: 1,
-                borderColor: '#E0E0E0',
-                shadowColor: '#000',
-                shadowOffset: {width: 0, height: 1},
-                shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
-              }}>
-              {/* Pharmacy Image Placeholder */}
-              <View
-                className="w-full items-center justify-center"
-                style={{height: 100, backgroundColor: '#F5F5F5'}}>
-                <Text style={{fontSize: 40}}>🏥</Text>
-              </View>
+      {/* Upload Section */}
+      <View className="px-5 mt-2">
+        <Text className="text-lg font-bold text-center mb-1">Upload Prescription</Text>
+        <Text className="text-xs text-gray-600 text-center mb-3">
+          We will recommend the best pharmacy for your need.
+        </Text>
 
-              {/* Pharmacy Info */}
-              <View className="p-3">
-                <Text className="text-sm font-bold mb-1" style={{color: '#333'}}>
-                  {pharmacy.Name || pharmacy.name}
-                </Text>
-                <Text className="text-xs mb-1" style={{color: '#666'}}>
-                  {pharmacy.DistanceKM ? `${pharmacy.DistanceKM.toFixed(1)} km Away` : ''}
-                </Text>
-                <View className="flex-row items-center">
-                  <Text style={{fontSize: 12, color: '#FFA500'}}>⭐</Text>
-                  <Text className="text-xs ml-1" style={{color: '#666'}}>
-                    4.5 (120 review)
+        <View
+          className="bg-white rounded-2xl p-4 mb-4"
+          style={{ borderWidth: 1, borderColor: "#E5E5E5" }}
+        >
+          {uploadedPreview ? (
+            <View>
+              <Text className="text-sm font-medium text-gray-700 mb-2">Preview</Text>
+
+              {(uploadedPreview.url || uploadedPreview.base64) &&
+              isImageMime(uploadedPreview.mimeType) ? (
+                <Image
+                  source={{
+                    uri: uploadedPreview.url
+                      ? uploadedPreview.url
+                      : `data:${uploadedPreview.mimeType};base64,${uploadedPreview.base64}`,
+                  }}
+                  style={{ width: "100%", height: 150, borderRadius: 8 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View className="items-center justify-center py-10">
+                  <Text style={{ fontSize: 40 }}>📎</Text>
+                  <Text
+                    className="text-xs mt-1 text-gray-600"
+                    numberOfLines={1}
+                  >
+                    {uploadedPreview.fileName}
                   </Text>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {pharmacies.length > 2 && (
-          <View className="px-4 mb-4">
-            <TouchableOpacity onPress={() => setShowAllNearby(!showAllNearby)}>
-              <Text style={{color: '#2563EB', fontWeight: '600'}}>
-                {showAllNearby ? 'See less' : 'See more'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Upload Prescription Section */}
-        <View className="px-4">
-          <Text className="text-xl font-bold text-center mb-2">
-            Upload Prescription
-          </Text>
-          <Text className="text-xs text-center mb-4" style={{color: '#666', lineHeight: 16}}>
-            We will show the pharmacy that fits as per{'\n'}your prescription.
-          </Text>
-
-          {/* Upload Options or Preview */}
-          <View
-            className="bg-white rounded-2xl p-5 mb-4"
-            style={{borderWidth: 1, borderColor: '#E0E0E0'}}>
-            {uploadedPreview ? (
-              <View>
-                <Text className="text-sm font-semibold mb-2" style={{color: '#333'}}>Preview</Text>
-                {uploadedPreview.url && isImageMime(uploadedPreview.mimeType) ? (
-                  <Image source={{uri: uploadedPreview.url}} style={{width: '100%', height: 180, borderRadius: 8}} resizeMode="cover" />
-                ) : (!uploadedPreview.url && uploadedPreview.base64 && isImageMime(uploadedPreview.mimeType)) ? (
-                  <Image source={{uri: `data:${uploadedPreview.mimeType};base64,${uploadedPreview.base64}`}} style={{width: '100%', height: 180, borderRadius: 8}} resizeMode="cover" />
-                ) : (
-                  <View className="items-center justify-center" style={{height: 120}}>
-                    <Text style={{fontSize: 40}}>📎</Text>
-                    <Text className="text-xs mt-2" style={{color: '#666'}} numberOfLines={1}>{uploadedPreview.fileName}</Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View className="flex-row justify-around">
-                <TouchableOpacity className="items-center" onPress={() => !uploading && setShowLinkModal(true)} disabled={uploading}>
-                  <View
-                    className="items-center justify-center mb-2"
-                    style={{width: 50, height: 50}}>
-                    {uploading ? (
-                      <ActivityIndicator size="small" color="#00A8A8" />
-                    ) : (
-                      <Text style={{fontSize: 32}}>📄</Text>
-                    )}
-                  </View>
-                  <Text className="text-sm font-medium">Upload Link</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity className="items-center" onPress={handlePickAndUploadFile} disabled={uploading}>
-                  <View
-                    className="items-center justify-center mb-2"
-                    style={{width: 50, height: 50}}>
-                    {uploading ? (
-                      <ActivityIndicator size="small" color="#00A8A8" />
-                    ) : (
-                      <Text style={{fontSize: 32}}>⬆️</Text>
-                    )}
-                  </View>
-                  <Text className="text-sm font-medium">Upload File</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Continue Button */}
-          <TouchableOpacity
-            className="rounded-xl py-4 items-center"
-            style={{backgroundColor: '#4CAF50', opacity: uploading || !uploadedPreview ? 0.5 : 1}}
-            disabled={uploading || !uploadedPreview}
-            onPress={handleContinueUpload}
-          >
-            <Text className="text-white text-base font-bold">Continue</Text>
-          </TouchableOpacity>
-
-          {/* Add Hospital */}
-          <View className="mt-4 items-center">
-            <TouchableOpacity onPress={() => setShowAddHospitalModal(true)}>
-              <Text style={{color: '#2563EB', fontWeight: '600'}}>+ Add New Hospital</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Uploading overlay */}
-      <Modal visible={uploading} transparent animationType="fade">
-        <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', alignItems: 'center'}}>
-          <View style={{backgroundColor: 'white', borderRadius: 12, padding: 16, minWidth: 180, alignItems: 'center'}}>
-            <ActivityIndicator size="large" color="#00A8A8" />
-            <Text style={{marginTop: 12, color: '#333', fontWeight: '600'}}>Uploading...</Text>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add Hospital Modal */}
-      <Modal visible={showAddHospitalModal} transparent animationType="slide" onRequestClose={() => setShowAddHospitalModal(false)}>
-        <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 16}}>
-          <View style={{backgroundColor: 'white', borderRadius: 12, padding: 16}}>
-            <Text style={{fontWeight: 'bold', fontSize: 16, marginBottom: 10}}>Add Hospital</Text>
-            {['Name','Address','City','State','Country','Latitude','Longitude','Phone'].map((key) => (
-              <View key={key} style={{marginBottom: 8}}>
-                <Text style={{fontSize: 12, marginBottom: 4, color: '#444'}}>{key}</Text>
-                <TextInput
-                  value={String(newHospital[key])}
-                  onChangeText={(t) => setNewHospital((p) => ({...p, [key]: t}))}
-                  keyboardType={(key==='Latitude' || key==='Longitude') ? 'numeric' : 'default'}
-                  style={{borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: '#000'}}
-                />
-              </View>
-            ))}
-            <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8}}>
-              <TouchableOpacity onPress={() => setShowAddHospitalModal(false)} style={{padding: 10}}>
-                <Text style={{color: '#6B7280'}}>Cancel</Text>
-              </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View className="flex-row justify-evenly">
               <TouchableOpacity
-                onPress={async () => {
-                  try {
-                    const payloadCap = {
-                      Name: newHospital.Name,
-                      Address: newHospital.Address,
-                      City: newHospital.City,
-                      State: newHospital.State,
-                      Country: newHospital.Country,
-                      Latitude: parseFloat(newHospital.Latitude) || 0,
-                      Longitude: parseFloat(newHospital.Longitude) || 0,
-                      Phone: newHospital.Phone,
-                    };
-                    const created = await PharmacyService.createPharmacy(payloadCap);
-                    console.log('Hospital created (pharmacy endpoint):', created);
-                    setShowAddHospitalModal(false);
-                    setNewHospital({Name:'',Address:'',City:'',State:'',Country:'',Latitude:'',Longitude:'',Phone:''});
-                    await loadNearby();
-                    showSuccessToast();
-                  } catch (e) {
-                    console.error('Create hospital error:', e);
-                  }
-                }}
-                style={{padding: 10}}>
-                <Text style={{color: '#2563EB', fontWeight: '600'}}>Save</Text>
+                className="items-center"
+                onPress={() => !uploading && setShowLinkModal(true)}
+              >
+                <Text style={{ fontSize: 36 }}>🔗</Text>
+                <Text className="text-sm mt-1 font-medium">Add Link</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="items-center"
+                onPress={handlePickAndUploadFile}
+              >
+                <Text style={{ fontSize: 34 }}>📄</Text>
+                <Text className="text-sm mt-1 font-medium">Add File</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          )}
         </View>
-      </Modal>
 
-      {/* Slide-in success toast */}
-      <Animated.View style={{position: 'absolute', top: 12, left: 16, right: 16, transform: [{translateY: toastY}]}}>
-        <View style={{backgroundColor: '#16A34A', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, shadowColor: '#000', shadowOpacity: 0.15, shadowOffset: {width:0, height:2}, shadowRadius: 6, elevation: 3}}>
-          <Text style={{color: 'white', fontWeight: '700'}}>Successfully uploaded</Text>
-        </View>
-      </Animated.View>
+        {/* Continue Button */}
+        <TouchableOpacity
+          onPress={handleContinueUpload}
+          disabled={!uploadedPreview || uploading}
+          className="rounded-xl py-4 mb-4"
+          style={{
+            backgroundColor: uploadedPreview ? "#059669" : "#9CA3AF",
+          }}
+        >
+          <Text className="text-white text-center text-base font-semibold">
+            Continue
+          </Text>
+        </TouchableOpacity>
 
-      {/* Link Modal */}
-      <Modal visible={showLinkModal} transparent animationType="fade" onRequestClose={() => setShowLinkModal(false)}>
-        <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24}}>
-          <View style={{backgroundColor: 'white', borderRadius: 12, padding: 16}}>
-            <Text style={{fontWeight: 'bold', fontSize: 16, marginBottom: 8}}>Upload Link</Text>
-            <TextInput
-              placeholder="https://example.com/file.pdf"
-              value={linkUrl}
-              onChangeText={setLinkUrl}
-              autoCapitalize="none"
-              keyboardType="url"
-              style={{borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: '#000'}}
-              placeholderTextColor="#999"
-            />
-            <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12}}>
-              <TouchableOpacity onPress={() => setShowLinkModal(false)} style={{paddingHorizontal: 12, paddingVertical: 8}}>
-                <Text style={{color: '#555'}}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleUploadLink} disabled={uploading} style={{paddingHorizontal: 12, paddingVertical: 8}}>
-                <Text style={{color: '#2196F3', fontWeight: 'bold'}}>{uploading ? 'Uploading...' : 'Upload'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        {/* Add new hospital */}
+        <TouchableOpacity
+          className="items-center mb-6"
+          onPress={() => setShowAddHospitalModal(true)}
+        >
+          <Text className="text-blue-600 font-semibold">
+            + Add New Hospital
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+
+    {/* Uploading overlay */}
+    <Modal visible={uploading} transparent animationType="fade">
+      <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', alignItems: 'center'}}>
+        <View style={{backgroundColor: 'white', borderRadius: 12, padding: 16, minWidth: 200, alignItems: 'center'}}>
+          <ActivityIndicator size="large" color="#00A8A8" />
+         
+         {progressText && <Text style={{marginTop: 12, color: '#333', fontWeight: '600'}}>{progressText || 'Please wait...'}</Text>}
         </View>
-      </Modal>
-    </View>
-  );
+      </View>
+    </Modal>
+
+    {/* Slide-in success toast */}
+    <Animated.View style={{position: 'absolute', top: 12, left: 16, right: 16, transform: [{translateY: toastY}]}}>
+      <View style={{backgroundColor: '#16A34A', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, shadowColor: '#000', shadowOpacity: 0.15, shadowOffset: {width:0, height:2}, shadowRadius: 6, elevation: 3}}>
+        <Text style={{color: 'white', fontWeight: '700'}}>Successfully uploaded</Text>
+      </View>
+    </Animated.View>
+  </View>
+);
+
 };
 
 export default PharmacyNearbyScreen;
