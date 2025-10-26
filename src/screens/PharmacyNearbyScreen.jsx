@@ -38,14 +38,14 @@ const PharmacyNearbyScreen = ({navigation}) => {
   const [showAllNearby, setShowAllNearby] = useState(false);
   const [showAddHospitalModal, setShowAddHospitalModal] = useState(false);
   const [newHospital, setNewHospital] = useState({
-    Name: '',
-    Address: '',
-    City: '',
-    State: '',
-    Country: '',
-    Latitude: '',
-    Longitude: '',
-    Phone: '',
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    latitude: '',
+    longitude: '',
+    phone: '',
   });
   const [currentCoords, setCurrentCoords] = useState(null); // { latitude, longitude }
   const [currentPlace, setCurrentPlace] = useState('Locating...');
@@ -59,9 +59,79 @@ const PharmacyNearbyScreen = ({navigation}) => {
     ]).start();
   };
 
+  const openAddHospital = async () => {
+    // ensure we have coords; if not, initialize location first
+    if (!currentCoords) {
+      await initLocationAndNearby();
+    }
+    const lat = currentCoords?.latitude;
+    const lon = currentCoords?.longitude;
+    // Pre-fill lat/long
+    setNewHospital((prev) => ({
+      ...prev,
+      latitude: lat ? String(lat) : prev.latitude || '',
+      longitude: lon ? String(lon) : prev.longitude || '',
+    }));
+    setShowAddHospitalModal(true);
+    // Also try to auto-fill address fields from reverse geocode
+    try {
+      if (lat && lon) {
+        const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'StudentApp/1.0 (RN)' }
+        });
+        const data = await resp.json();
+        const a = data && data.address ? data.address : {};
+        const composedAddress = [a.house_number, a.road, a.suburb || a.neighbourhood || a.locality]
+          .filter(Boolean)
+          .join(', ');
+        const fullDisplay = data?.display_name || '';
+        setNewHospital((prev) => ({
+          ...prev,
+          address: prev.address || composedAddress || fullDisplay || currentPlace || '',
+          city: prev.city || a.city || a.town || a.village || '',
+          state: prev.state || a.state || '',
+          country: prev.country || a.country || '',
+        }));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     initLocationAndNearby();
   }, []);
+
+  // If modal is open and coords arrive later, auto-fill fields
+  useEffect(() => {
+    const fillFromCoords = async () => {
+      if (!showAddHospitalModal || !currentCoords) return;
+      const lat = currentCoords.latitude;
+      const lon = currentCoords.longitude;
+      setNewHospital((prev) => ({
+        ...prev,
+        latitude: prev.latitude || String(lat),
+        longitude: prev.longitude || String(lon),
+      }));
+      try {
+        const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'StudentApp/1.0 (RN)' }
+        });
+        const data = await resp.json();
+        const a = data && data.address ? data.address : {};
+        const composedAddress = [a.house_number, a.road, a.suburb || a.neighbourhood || a.locality]
+          .filter(Boolean)
+          .join(', ');
+        const fullDisplay = data?.display_name || '';
+        setNewHospital((prev) => ({
+          ...prev,
+          address: prev.address || composedAddress || fullDisplay || currentPlace || '',
+          city: prev.city || a.city || a.town || a.village || '',
+          state: prev.state || a.state || '',
+          country: prev.country || a.country || '',
+        }));
+      } catch {}
+    };
+    fillFromCoords();
+  }, [showAddHospitalModal, currentCoords]);
 
   const loadPharmacies = async () => {
     try {
@@ -480,8 +550,8 @@ const PharmacyNearbyScreen = ({navigation}) => {
       {/* Section Title */}
       <View className="px-4 mt-4 mb-2 flex-row justify-between items-center">
         <Text className="text-lg font-bold">Nearby Pharmacy</Text>
-        <TouchableOpacity onPress={() => currentCoords ? loadNearby(currentCoords.latitude, currentCoords.longitude) : initLocationAndNearby()}>
-          <Text className="text-blue-600 font-medium">Refresh</Text>
+        <TouchableOpacity onPress={openAddHospital}>
+          <Text className="text-blue-600 font-semibold">+ Add Hospital</Text>
         </TouchableOpacity>
       </View>
 
@@ -614,15 +684,6 @@ const PharmacyNearbyScreen = ({navigation}) => {
           </Text>
         </TouchableOpacity>
 
-        {/* Add new hospital */}
-        <TouchableOpacity
-          className="items-center mb-6"
-          onPress={() => setShowAddHospitalModal(true)}
-        >
-          <Text className="text-blue-600 font-semibold">
-            + Add New Hospital
-          </Text>
-        </TouchableOpacity>
       </View>
     </ScrollView>
 
@@ -643,6 +704,77 @@ const PharmacyNearbyScreen = ({navigation}) => {
         <Text style={{color: 'white', fontWeight: '700'}}>Successfully uploaded</Text>
       </View>
     </Animated.View>
+
+    {/* Add Hospital Modal */}
+    <Modal
+      visible={showAddHospitalModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowAddHospitalModal(false)}
+    >
+      <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 16}}>
+        <View style={{backgroundColor: 'white', borderRadius: 12, padding: 16}}>
+          <Text style={{fontWeight: 'bold', fontSize: 16, marginBottom: 10}}>Add Hospital</Text>
+          {[
+            {label: 'Name', key: 'name'},
+            {label: 'Address', key: 'address'},
+            {label: 'City', key: 'city'},
+            {label: 'State', key: 'state'},
+            {label: 'Country', key: 'country'},
+            {label: 'Latitude', key: 'latitude'},
+            {label: 'Longitude', key: 'longitude'},
+            {label: 'Phone', key: 'phone'},
+          ].map(({label, key}) => (
+            <View key={key} style={{marginBottom: 8}}>
+              <Text style={{fontSize: 12, marginBottom: 4, color: '#444'}}>{label}</Text>
+              <TextInput
+                value={String(newHospital[key] ?? '')}
+                onChangeText={(t) => setNewHospital((p) => ({...p, [key]: t}))}
+                keyboardType={(key==='latitude' || key==='longitude') ? 'numeric' : 'default'}
+                style={{borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, color: '#000'}}
+              />
+            </View>
+          ))}
+          <View style={{flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8}}>
+            <TouchableOpacity onPress={() => setShowAddHospitalModal(false)} style={{padding: 10}}>
+              <Text style={{color: '#6B7280'}}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  const payload = {
+                    name: newHospital.name,
+                    address: newHospital.address,
+                    city: newHospital.city,
+                    state: newHospital.state,
+                    country: newHospital.country,
+                    latitude: parseFloat(newHospital.latitude) || 0,
+                    longitude: parseFloat(newHospital.longitude) || 0,
+                    phone: newHospital.phone,
+                  };
+                  console.log('Create hospital (final payload):', payload);
+                  const created = await PharmacyService.createPharmacy(payload);
+                  console.log('Hospital created:', created);
+                  setShowAddHospitalModal(false);
+                  setNewHospital({name:'',address:'',city:'',state:'',country:'',latitude:'',longitude:'',phone:''});
+                  if (currentCoords) {
+                    await loadNearby(currentCoords.latitude, currentCoords.longitude);
+                  } else {
+                    await initLocationAndNearby();
+                  }
+                } catch (e) {
+                  console.error('Create hospital error:', e);
+                  RNAlert.alert('Error', e?.message || 'Failed to create hospital');
+                }
+              }}
+              style={{padding: 10}}
+            >
+              <Text style={{color: '#2563EB', fontWeight: '600'}}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   </View>
 );
 
