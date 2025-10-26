@@ -13,6 +13,7 @@ import {
   Animated,
   Platform,
   PermissionsAndroid,
+  Linking,
 } from 'react-native';
 import {Spinner} from '../components';
 import Geolocation from 'react-native-geolocation-service';
@@ -50,6 +51,7 @@ const PharmacyNearbyScreen = ({navigation}) => {
   const [currentCoords, setCurrentCoords] = useState(null); // { latitude, longitude }
   const [currentPlace, setCurrentPlace] = useState('Locating...');
   const [progressText, setProgressText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const showSuccessToast = () => {
     Animated.sequence([
       Animated.delay(500),
@@ -555,9 +557,30 @@ const PharmacyNearbyScreen = ({navigation}) => {
         </TouchableOpacity>
       </View>
 
+      {/* Search */}
+      <View className="px-4 mb-3">
+        <View
+          className="flex-row items-center bg-gray-50"
+          style={{borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 46}}>
+          <Text style={{fontSize: 18, marginRight: 8}}>🔎</Text>
+          <TextInput
+            placeholder="Search pharmacies..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={{flex: 1, color: '#111'}}
+          />
+        </View>
+      </View>
+
       {/* Card Container */}
       <View className="px-4 pb-2 flex-row flex-wrap justify-between">
-        {(showAllNearby ? pharmacies : pharmacies.slice(0, 2)).map((pharmacy, index) => (
+        {((showAllNearby ? pharmacies : pharmacies.slice(0, 2))
+          .filter((p) => {
+            const name = (p.Name || p.name || '').toString().toLowerCase();
+            return name.includes(searchQuery.trim().toLowerCase());
+          })
+        ).map((pharmacy, index) => (
           <TouchableOpacity
             key={(pharmacy.Id || pharmacy.id || index).toString()}
             className="bg-white mb-4"
@@ -581,19 +604,47 @@ const PharmacyNearbyScreen = ({navigation}) => {
             </View>
 
             <View className="p-3">
-              <Text className="text-sm font-semibold text-gray-800" numberOfLines={1}>
-                {pharmacy.Name || pharmacy.name}
-              </Text>
+              <View className="flex-row justify-between items-start">
+                <View style={{flex: 1, paddingRight: 6}}>
+                  <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
+                    {pharmacy.Name || pharmacy.name}
+                  </Text>
+                  {!!pharmacy.DistanceKM && (
+                    <Text className="text-[11px] text-gray-500 mt-1">
+                      {(pharmacy.DistanceKM || 0).toFixed(1)} km away
+                    </Text>
+                  )}
+                </View>
+                <View style={{backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8}}>
+                  <Text style={{fontSize: 11, color: '#92400E'}}>⭐ 4.5</Text>
+                </View>
+              </View>
 
-              {pharmacy.DistanceKM && (
-                <Text className="text-[11px] text-gray-500 mt-1">
-                  {pharmacy.DistanceKM.toFixed(1)} km away
-                </Text>
-              )}
-
-              <View className="flex-row items-center mt-1">
-                <Text style={{ color: "#FBBF24", fontSize: 12 }}>⭐</Text>
-                <Text className="text-[11px] text-gray-500 ml-1">4.5 (120 rev)</Text>
+              <View className="flex-row justify-between mt-3">
+                <TouchableOpacity
+                  style={{flex: 1, marginRight: 6, backgroundColor: '#EEF2FF', borderRadius: 10, paddingVertical: 8, alignItems: 'center'}}
+                  onPress={() => {
+                    const phone = (pharmacy.Phone || pharmacy.phone || '').toString();
+                    if (phone) Linking.openURL(`tel:${phone}`);
+                  }}
+                >
+                  <Text style={{color: '#4338CA', fontWeight: '600'}}>Call</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{flex: 1, marginLeft: 6, backgroundColor: '#ECFDF5', borderRadius: 10, paddingVertical: 8, alignItems: 'center'}}
+                  onPress={() => {
+                    const lat = pharmacy.Latitude ?? pharmacy.latitude;
+                    const lon = pharmacy.Longitude ?? pharmacy.longitude;
+                    if (typeof lat === 'number' && typeof lon === 'number') {
+                      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lon}`);
+                    } else {
+                      const q = encodeURIComponent(`${pharmacy.Name || pharmacy.name}`);
+                      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`);
+                    }
+                  }}
+                >
+                  <Text style={{color: '#065F46', fontWeight: '600'}}>Map</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </TouchableOpacity>
