@@ -1,0 +1,43 @@
+# AsyncStorage Installation Instructions
+
+To use the login functionality with data storage, you need to install AsyncStorage:
+
+## Installation Command:
+
+```bash
+npm install @react-native-async-storage/async-storage
+```
+
+OR
+
+```bash
+yarn add @react-native-async-storage/async-storage
+```
+
+## For iOS (if using):
+
+```bash
+cd ios && pod install && cd ..
+```
+
+## What it does:
+
+AsyncStorage is used to:
+- Store user login data locally
+- Persist user session
+- Save user preferences
+- Cache data offline
+
+## Files that use AsyncStorage:
+
+1. src/utils/auth.js - Authentication functions
+2. src/utils/storage.js - Generic storage utilities
+3. src/screens/LoginScreen.jsx - Login screen
+
+## After installation:
+
+The login screen will be fully functional and will:
+- Call the API at http://61.246.33.108:8069/studentapi/login
+- Store user data locally
+- Persist login session
+- Allow logout functionality
