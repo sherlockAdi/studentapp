@@ -556,18 +556,9 @@ const PharmacyNearbyScreen = ({navigation}) => {
       {/* Section Title */}
       <View className="px-4 mt-4 mb-2 flex-row justify-between items-center">
         <Text className="text-lg font-bold">Nearby Pharmacy</Text>
-        <View style={{flexDirection: 'row', alignItems: 'center'}}>
-          {pharmacies.length > 2 ? (
-            <TouchableOpacity onPress={() => setShowAllNearby(!showAllNearby)} style={{marginRight: 12}}>
-              <Text className="text-blue-600 font-semibold">
-                {showAllNearby ? 'See Less' : 'See More'}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity onPress={openAddHospital}>
-            <Text className="text-blue-600 font-semibold">+ Add Hospital</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={openAddHospital}>
+          <Text className="text-blue-600 font-semibold">+ Add Hospital</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -674,7 +665,14 @@ const PharmacyNearbyScreen = ({navigation}) => {
         ))}
       </View>
 
-      {/* See more moved into title row */}
+      {/* See More bottom-right */}
+      {pharmacies.length > 2 && (
+        <View className="px-4 mb-2" style={{alignItems: 'flex-end'}}>
+          <TouchableOpacity onPress={() => setShowAllNearby(!showAllNearby)}>
+            <Text className="text-blue-600 font-semibold">{showAllNearby ? 'See Less' : 'See More'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Upload Section */}
       <View className="px-5 mt-2">
