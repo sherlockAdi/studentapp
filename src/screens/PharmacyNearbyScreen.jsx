@@ -519,23 +519,27 @@ const PharmacyNearbyScreen = ({navigation}) => {
   <View className="flex-1 bg-white">
     
     {/* HEADER */}
-  <View className="flex-row items-center px-5 pt-12 pb-4 bg-white shadow-md rounded-b-3xl">
+  <View className="flex-row items-center px-4 pt-8 pb-3 bg-white shadow-sm rounded-b-2xl">
   <TouchableOpacity
     onPress={() => navigation.goBack()}
-    className="w-10 h-10 rounded-full border border-gray-300 items-center justify-center"
+    className="w-9 h-9 rounded-full border border-gray-300 items-center justify-center"
   >
-    <Text className="text-lg font-bold">←</Text>
+    <Text className="text-base font-bold">←</Text>
   </TouchableOpacity>
 
-  <View className="ml-4" style={{flexShrink: 1}}>
-    <Text className="text-sm text-gray-500">📍 Current Location</Text>
-    <Text
-      className="text-lg font-bold text-gray-900"
-      numberOfLines={2}
-      ellipsizeMode="tail"
-      style={{lineHeight: 22}}
-    >
-      {currentPlace || 'Locating...'}
+  <View className="ml-3" style={{flexShrink: 1, flex: 1}}>
+    <View className="flex-row items-center">
+      <Text style={{fontSize: 14, marginRight: 6}}>📍</Text>
+      <Text
+        className="text-base font-semibold text-gray-900"
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {(currentPlace || 'Locating...').split(',')[0]}
+      </Text>
+    </View>
+    <Text className="text-[11px] text-gray-500" numberOfLines={1} ellipsizeMode="tail">
+      {(currentPlace || 'Locating...')}
     </Text>
   </View>
 </View>
@@ -552,9 +556,18 @@ const PharmacyNearbyScreen = ({navigation}) => {
       {/* Section Title */}
       <View className="px-4 mt-4 mb-2 flex-row justify-between items-center">
         <Text className="text-lg font-bold">Nearby Pharmacy</Text>
-        <TouchableOpacity onPress={openAddHospital}>
-          <Text className="text-blue-600 font-semibold">+ Add Hospital</Text>
-        </TouchableOpacity>
+        <View style={{flexDirection: 'row', alignItems: 'center'}}>
+          {pharmacies.length > 2 ? (
+            <TouchableOpacity onPress={() => setShowAllNearby(!showAllNearby)} style={{marginRight: 12}}>
+              <Text className="text-blue-600 font-semibold">
+                {showAllNearby ? 'See Less' : 'See More'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity onPress={openAddHospital}>
+            <Text className="text-blue-600 font-semibold">+ Add Hospital</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
@@ -575,12 +588,14 @@ const PharmacyNearbyScreen = ({navigation}) => {
 
       {/* Card Container */}
       <View className="px-4 pb-2 flex-row flex-wrap justify-between">
-        {((showAllNearby ? pharmacies : pharmacies.slice(0, 2))
-          .filter((p) => {
-            const name = (p.Name || p.name || '').toString().toLowerCase();
+        {(() => {
+          const filtered = (pharmacies || []).filter((p) => {
+            const name = (p?.Name || p?.name || '').toString().toLowerCase();
             return name.includes(searchQuery.trim().toLowerCase());
-          })
-        ).map((pharmacy, index) => (
+          });
+          const visible = showAllNearby ? filtered : filtered.slice(0, 2);
+          return visible;
+        })().map((pharmacy, index) => (
           <TouchableOpacity
             key={(pharmacy.Id || pharmacy.id || index).toString()}
             className="bg-white mb-4"
@@ -596,11 +611,14 @@ const PharmacyNearbyScreen = ({navigation}) => {
               shadowOffset: { width: 0, height: 2 },
             }}
           >
-            <View
-              className="w-full items-center justify-center rounded-t-2xl"
-              style={{ height: 90, backgroundColor: "#F4F5F7" }}
-            >
-              <Text style={{ fontSize: 34 }}>🏥</Text>
+            {/* Accent bar */}
+            <View style={{height: 6, backgroundColor: '#4F46E5', borderTopLeftRadius: 16, borderTopRightRadius: 16}} />
+
+            {/* Icon area */}
+            <View className="w-full items-center justify-center" style={{ height: 76, backgroundColor: "#F8FAFC", borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
+              <View style={{width: 46, height: 46, borderRadius: 23, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center'}}>
+                <Text style={{ fontSize: 22 }}>🏥</Text>
+              </View>
             </View>
 
             <View className="p-3">
@@ -609,6 +627,11 @@ const PharmacyNearbyScreen = ({navigation}) => {
                   <Text className="text-sm font-semibold text-gray-900" numberOfLines={1}>
                     {pharmacy.Name || pharmacy.name}
                   </Text>
+                  {!!(pharmacy.Address || pharmacy.address) && (
+                    <Text className="text-[11px] text-gray-500 mt-1" numberOfLines={1}>
+                      {pharmacy.Address || pharmacy.address}
+                    </Text>
+                  )}
                   {!!pharmacy.DistanceKM && (
                     <Text className="text-[11px] text-gray-500 mt-1">
                       {(pharmacy.DistanceKM || 0).toFixed(1)} km away
@@ -628,7 +651,7 @@ const PharmacyNearbyScreen = ({navigation}) => {
                     if (phone) Linking.openURL(`tel:${phone}`);
                   }}
                 >
-                  <Text style={{color: '#4338CA', fontWeight: '600'}}>Call</Text>
+                  <Text style={{color: '#4338CA', fontWeight: '600'}}>📞 Call</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={{flex: 1, marginLeft: 6, backgroundColor: '#ECFDF5', borderRadius: 10, paddingVertical: 8, alignItems: 'center'}}
@@ -643,7 +666,7 @@ const PharmacyNearbyScreen = ({navigation}) => {
                     }
                   }}
                 >
-                  <Text style={{color: '#065F46', fontWeight: '600'}}>Map</Text>
+                  <Text style={{color: '#065F46', fontWeight: '600'}}>🗺️ Map</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -651,16 +674,7 @@ const PharmacyNearbyScreen = ({navigation}) => {
         ))}
       </View>
 
-      {/* SEE MORE */}
-      {pharmacies.length > 2 && (
-        <View className="items-center mb-4">
-          <TouchableOpacity onPress={() => setShowAllNearby(!showAllNearby)}>
-            <Text className="text-blue-600 font-semibold">
-              {showAllNearby ? "See Less" : "See More"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* See more moved into title row */}
 
       {/* Upload Section */}
       <View className="px-5 mt-2">
